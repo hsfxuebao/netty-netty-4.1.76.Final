@@ -63,6 +63,7 @@ public class ChannelInboundHandlerAdapter extends ChannelHandlerAdapter implemen
      *
      * Sub-classes may override this method to change behavior.
      */
+    // 通道就绪事件
     @Skip
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
@@ -89,6 +90,7 @@ public class ChannelInboundHandlerAdapter extends ChannelHandlerAdapter implemen
      */
     @Skip
     @Override
+    // 通道读取数据事件
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ctx.fireChannelRead(msg);
     }
@@ -101,6 +103,7 @@ public class ChannelInboundHandlerAdapter extends ChannelHandlerAdapter implemen
      */
     @Skip
     @Override
+    // 数据读取完毕事件
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
         ctx.fireChannelReadComplete();
     }
@@ -138,6 +141,7 @@ public class ChannelInboundHandlerAdapter extends ChannelHandlerAdapter implemen
     @Skip
     @Override
     @SuppressWarnings("deprecation")
+    // 通道发生异常事件
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
             throws Exception {
         ctx.fireExceptionCaught(cause);
