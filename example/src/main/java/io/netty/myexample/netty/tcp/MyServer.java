@@ -1,4 +1,4 @@
-package io.netty.myexample.netty.protocoltcp;
+package io.netty.myexample.netty.tcp;
 
 
 import io.netty.bootstrap.ServerBootstrap;

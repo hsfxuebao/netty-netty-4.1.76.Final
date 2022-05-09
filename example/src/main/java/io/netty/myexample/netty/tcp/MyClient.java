@@ -1,4 +1,4 @@
-package io.netty.myexample.netty.protocoltcp;
+package io.netty.myexample.netty.tcp;
 
 
 
@@ -16,7 +16,8 @@ public class MyClient {
         try {
 
             Bootstrap bootstrap = new Bootstrap();
-            bootstrap.group(group).channel(NioSocketChannel.class)
+            bootstrap.group(group)
+                    .channel(NioSocketChannel.class)
                     .handler(new MyClientInitializer()); //自定义一个初始化类
 
             ChannelFuture channelFuture = bootstrap.connect("localhost", 7000).sync();
