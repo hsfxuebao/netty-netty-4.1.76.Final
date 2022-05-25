@@ -68,25 +68,44 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      * @param chooserFactory    the {@link EventExecutorChooserFactory} to use.
      * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
      */
+    /**
+     *
+     * @param nThreads 使用的线程数，默认为 核数*2
+     * @param executor 执行器，如果传入null,则采用Netty默认的线程工厂和默认的执行器ThreadPerTaskExecutor
+     * @param chooserFactory 单例DefaultEventExecutorChooserFactory
+     * @param args 在创建执行器的时候传入固定参数
+     */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
                                             EventExecutorChooserFactory chooserFactory, Object... args) {
+        /** 1.初始化线程池
+         */
+        // 参数校验nThread合法性，
         checkPositive(nThreads, "nThreads");
 
+        //executor校验⾮空, 如果为空就创建ThreadPerTaskExecutor, 该类实现了 Executor接⼝
+        // 这个executor 是⽤来执⾏线程池中的所有的线程，也就是所有的NioEventLoop，其实从
+        //NioEventLoop构造器中也可以知道，NioEventLoop构造器中都传⼊了executor这个参数。
         if (executor == null) {
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
-
+        // 创建指定线程数的执行器数组
+        //这⾥的children数组，其实就是线程池的核⼼实现，线程池中就是通过指定的线程数组来实现线程池；
+        //数组中每个元素其实就是⼀个EventLoop，EventLoop是EventExecutor的⼦接⼝。
         children = new EventExecutor[nThreads];
-
+        // 初始化线程数组
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
+                // todo 创建 new NioEventLoop()
+                // newChild(executor, args) 函数在NioEventLoopGroup类中实现了,
+                // 实质就是就是存⼊了⼀个 NIOEventLoop类实例
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
                 // TODO: Think about if this is a good exception type
                 throw new IllegalStateException("failed to create a child event loop", e);
             } finally {
+                // 创建失败，优雅的关闭
                 if (!success) {
                     for (int j = 0; j < i; j ++) {
                         children[j].shutdownGracefully();
@@ -107,9 +126,11 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 }
             }
         }
-
+        /** 2.实例化线程⼯⼚执⾏器选择器: 根据children获取选择器 */
         chooser = chooserFactory.newChooser(children);
 
+        // 为每一个单例线程池添加一个关闭监听器
+        /** 3.为每个EventLoop线程添加线程终⽌监听器*/
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override
             public void operationComplete(Future<Object> future) throws Exception {
@@ -124,6 +145,8 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         }
 
         Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
+        /** 4. 将children 添加到对应的set集合中去重，表⽰只可读。*/
+        // 将所有的单例线程池添加到一个HashSet中
         Collections.addAll(childrenSet, children);
         readonlyChildren = Collections.unmodifiableSet(childrenSet);
     }

@@ -173,15 +173,18 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private SelectorTuple openSelector() {
         final Selector unwrappedSelector;
         try {
+            //通过provider.openSelector()创建并打开多路复用器
             unwrappedSelector = provider.openSelector();
         } catch (IOException e) {
             throw new ChannelException("failed to open a new selector", e);
         }
-
+        //如果没有开启selectedKeys优化开关，就立即返回。
         if (DISABLE_KEY_SET_OPTIMIZATION) {
             return new SelectorTuple(unwrappedSelector);
         }
 
+        //如果开启了优化开关，需要通过反射的方式从Selector实例中获取selectedKeys和publicSelectedKeys，
+        //将上述两个成员变量设置为可写，通过反射的方式使用Netty构造的selectedKeys包装类selectedKeySet将原JDK的selectedKeys替换掉。
         Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
             public Object run() {
@@ -437,10 +440,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     @Override
     protected void run() {
         int selectCnt = 0;
+        //所有的逻辑操作都在for循环体内进行，只有当NioEventLoop接收到退出指令的时候，才退出循环，否则一直执行下去，这也是通用的NIO线程实现方式。
+        /** 死循环：NioEventLoop 事件循环的核心就是这里! */
         for (;;) {
             try {
                 int strategy;
                 try {
+                    // 1.通过 select/selectNow 调用查询当前是否有就绪的 IO 事件
+                    // 当 selectStrategy.calculateStrategy() 返回的是 CONTINUE, 就结束此轮循环,进入下一轮循环;
+                    // 当返回的是 SELECT, 就表示任务队列为空,就调用select(Boolean);
                     strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
                     switch (strategy) {
                     case SelectStrategy.CONTINUE:
@@ -476,23 +484,28 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     continue;
                 }
 
+                //2. 当有IO事件就绪时, 就会处理这些IO事件
                 selectCnt++;
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
+                //ioRatio表示:此线程分配给IO操作所占的时间比(即运行processSelectedKeys耗时在整个循环中所占用的时间).
                 final int ioRatio = this.ioRatio;
                 boolean ranTasks;
                 if (ioRatio == 100) {
                     try {
                         if (strategy > 0) {
+                            //查询就绪的 IO 事件, 然后处理它;
                             processSelectedKeys();
                         }
                     } finally {
                         // Ensure we always run tasks.
+                        //运行 taskQueue 中的任务.
                         ranTasks = runAllTasks();
                     }
                 } else if (strategy > 0) {
                     final long ioStartTime = System.nanoTime();
                     try {
+                        //查询就绪的 IO 事件, 然后处理它;
                         processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
@@ -646,6 +659,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private void processSelectedKeysOptimized() {
+        //1. 迭代 selectedKeys 获取就绪的 IO 事件, 然后为每个事件都调用 processSelectedKey 来处理它.
         for (int i = 0; i < selectedKeys.size; ++i) {
             final SelectionKey k = selectedKeys.keys[i];
             // null out entry in the array to allow to have it GC'ed once the Channel close
@@ -655,6 +669,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             final Object a = k.attachment();
 
             if (a instanceof AbstractNioChannel) {
+                //2. 为事件调用processSelectedKey方法来处理 对应的事件
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
                 @SuppressWarnings("unchecked")
@@ -700,6 +715,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             int readyOps = k.readyOps();
             // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
             // the NIO JDK channel implementation may throw a NotYetConnectedException.
+            // 连接事件
             if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
@@ -711,6 +727,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
 
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
+            //可写事件
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {
                 // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
                 ch.unsafe().forceFlush();
@@ -718,7 +735,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
+            // //可读事件
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+                // 这里就是核心中的核心了. 事件循环器读到了字节后, 就会将数据传递到pipeline
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {

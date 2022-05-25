@@ -164,7 +164,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     protected SingleThreadEventExecutor(EventExecutorGroup parent, Executor executor,
                                         boolean addTaskWakesUp, Queue<Runnable> taskQueue,
                                         RejectedExecutionHandler rejectedHandler) {
-        super(parent);
+        super(parent); // 设置EventLoop所属于的EventLoopGroup
         this.addTaskWakesUp = addTaskWakesUp;
         this.maxPendingTasks = DEFAULT_MAX_PENDING_EXECUTOR_TASKS;
         this.executor = ThreadExecutorMap.apply(executor, this);
@@ -821,10 +821,15 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void execute(Runnable task, boolean immediate) {
+        /**
+         * 判断Thread.currentThread()当前线程是不是与NioEventLoop绑定的本地线程;
+         * 如果Thread.currentThread()== this.thread, 那么只用将execute()方法中的task添加到任务队列中就好;
+         * 如果Thread.currentThread()== this.thread 返回false, 那就先调用startThread()方法启动本地线程,然后再将task添加到任务队列中.
+         */
         boolean inEventLoop = inEventLoop();
         addTask(task);
         if (!inEventLoop) {
-            startThread();
+            startThread(); // 启动线程
             if (isShutdown()) {
                 boolean reject = false;
                 try {
@@ -938,9 +943,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void startThread() {
         if (state == ST_NOT_STARTED) {
+            //设置thread 的状态 this.state是 ST_STARTED 已启动
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
+                    //真正启动线程的函数, 其作用类似于 thread.start()
                     doStartThread();
                     success = true;
                 } finally {
@@ -971,10 +978,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void doStartThread() {
+        //启动线程之前，必须保证thread 是null，其实也就是thread还没有启动。
         assert thread == null;
+        /** 通过executor启动一个新的task, 在task里面启动this.thread线程。*/
         executor.execute(new Runnable() {
             @Override
             public void run() {
+                // 1. 将当前thread 赋值给 this.thread 也就是将启动的线程赋值给本地绑定线程thread
                 thread = Thread.currentThread();
                 if (interrupted) {
                     thread.interrupt();
@@ -983,6 +993,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    // 2. 实际上是调用NioEventLoop.run() 方法实现 事件循环机制
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {
@@ -1029,6 +1040,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                         // No need to loop here, this is the final pass.
                         confirmShutdown();
                     } finally {
+                        //确保事件循环结束之后，关闭线程，清理资源。
                         try {
                             cleanup();
                         } finally {

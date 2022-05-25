@@ -38,6 +38,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             InternalLoggerFactory.getInstance(DefaultPromise.class.getName() + ".rejectedExecution");
     private static final int MAX_LISTENER_STACK_DEPTH = Math.min(8,
             SystemPropertyUtil.getInt("io.netty.defaultPromise.maxListenerStackDepth", 8));
+    // result字段的原子更新器
     @SuppressWarnings("rawtypes")
     private static final AtomicReferenceFieldUpdater<DefaultPromise, Object> RESULT_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(DefaultPromise.class, Object.class, "result");
@@ -47,7 +48,9 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
     private static final StackTraceElement[] CANCELLATION_STACK = CANCELLATION_CAUSE_HOLDER.cause.getStackTrace();
 
+    // 缓存执行结果的字段
     private volatile Object result;
+    // promise所在的线程
     private final EventExecutor executor;
     /**
      * One or more listeners. Can be a {@link GenericFutureListener} or a {@link DefaultFutureListeners}.
@@ -55,10 +58,12 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
      *
      * Threading - synchronized(this). We must support adding listeners when there is no EventExecutor.
      */
+    // 一个或者多个回调方法
     private Object listeners;
     /**
      * Threading - synchronized(this). We are required to hold the monitor to use Java's underlying wait()/notifyAll().
      */
+    // 阻塞线程数量计数器
     private short waiters;
 
     /**
@@ -177,10 +182,12 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         checkNotNull(listener, "listener");
 
         synchronized (this) {
+            // 添加回调方法
             addListener0(listener);
         }
 
         if (isDone()) {
+            // 如果I/O操作已经结束，直接触发回调
             notifyListeners();
         }
 
@@ -237,21 +244,26 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @Override
     public Promise<V> await() throws InterruptedException {
         if (isDone()) {
+            // 如果已经完成，直接返回
             return this;
         }
 
+        // 可以被中断
         if (Thread.interrupted()) {
             throw new InterruptedException(toString());
         }
-
+        //检查死循环
         checkDeadLock();
 
         synchronized (this) {
             while (!isDone()) {
+                // 递增计数器（用于记录有多少个线程在等待该promise返回结果）
                 incWaiters();
                 try {
+                    // 阻塞等待结果
                     wait();
                 } finally {
+                    // 递减计数器
                     decWaiters();
                 }
             }
@@ -401,7 +413,9 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     @Override
     public Promise<V> sync() throws InterruptedException {
+        // 阻塞等待
         await();
+        // 如果有异常则抛出
         rethrowIfFailed();
         return this;
     }
@@ -585,10 +599,13 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     private void addListener0(GenericFutureListener<? extends Future<? super V>> listener) {
         if (listeners == null) {
+            // 只有一个回调方法直接赋值
             listeners = listener;
         } else if (listeners instanceof DefaultFutureListeners) {
+            // 将回调方法添加到DefaultFutureListeners内部维护的listeners数组中
             ((DefaultFutureListeners) listeners).add(listener);
         } else {
+            // 如果有多个回调方法，新建一个DefaultFutureListeners以保存更多的回调方法
             listeners = new DefaultFutureListeners((GenericFutureListener<?>) listeners, listener);
         }
     }
@@ -610,6 +627,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     }
 
     private boolean setValue0(Object objResult) {
+        // 原子修改result字段为objResult
         if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
             RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
             if (checkNotifyWaiters()) {
@@ -626,6 +644,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
      */
     private synchronized boolean checkNotifyWaiters() {
         if (waiters > 0) {
+            // 如果有其他线程在等待该promise的结果，则唤醒他们
             notifyAll();
         }
         return listeners != null;

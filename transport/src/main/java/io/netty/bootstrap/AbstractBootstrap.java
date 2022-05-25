@@ -269,6 +269,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // todo 初始化和注册
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
@@ -276,11 +277,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
 
         if (regFuture.isDone()) {
+            // 如果注册已经成功
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
+            // todo 执行doBind()方法，完成对端口的绑定
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
+            // 如果注册尚未完成
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
             regFuture.addListener(new ChannelFutureListener() {
@@ -307,7 +311,24 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
-            channel = channelFactory.newChannel();
+            /** 说明： channelFactory.newChannel() 方法 的作用 通过 ServerBootstrap 的
+             * 通道工厂反射创建一个NioServerSocketChannel, 具体追踪源码可以得到下面结论
+            (1) 通过 NIO 的 SelectorProvider 的 openServerSocketChannel 方法得到 JDK 的 channel。目的是让 Netty 包装 JDK 的 channel。
+            (2) 创建了一个唯一的 ChannelId，创建了一个 NioMessageUnsafe，用于操作消息，创建了一个 DefaultChannelPipeline 管道，是个双向链表结构，用于过滤所有的进出的消息。
+            (3) 创建了一个 NioServerSocketChannelConfig 对象，用于对外展示一些配置。
+            */
+            channel = channelFactory.newChannel();//NioServerSocketChannel
+
+            /**  说明：init 个 初始化这个 NioServerSocketChannel, 具体追踪源码可以得到如下结论
+              (1) init 方法，这是个抽象方法(AbstractBootstrap 类的)由 ，由 ServerBootstrap 实现（可以追一下源码 //setChannelOptions(channel, options, logger); ）。
+              (2) 设置 NioServerSocketChannel 的 的 TCP 属性。
+              (3) 由于 LinkedHashMap 是非线程安全的，使用同步进行处理。
+              (4) 对 NioServerSocketChannel 的 的 ChannelPipeline 加 添加 ChannelInitializer 处理器。
+              (5) 可以看出， init 和 的方法的核心作用在和 ChannelPipeline 相关。
+              (6) 从NioServerSocketChannel 的初始化过程中，我们知道，pipeline 是一个双向链表，并了且，他本身就初始化了 head 和tail的 ，
+             这里调用了他的 addLast 个方法，也就是将整个handler到插入到tail的为前面，因为 tail 永远会在后面，需要做一些系统的固定工作。
+            */
+            // todo
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -320,6 +341,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
+        // 如果异常不为null，则意味着底层的I/O已经失败，并且promise设置了失败异常
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
@@ -353,6 +375,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             @Override
             public void run() {
                 if (regFuture.isSuccess()) {
+                    // todo
                     channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 } else {
                     promise.setFailure(regFuture.cause());

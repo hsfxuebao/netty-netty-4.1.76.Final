@@ -50,8 +50,12 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
 
+    // 这是一个 Java NIO SocketChannel 和 ServerSocketChannel 的公共父类，
+    // 放在这里是因为 AbstractNioChannel 也是 NioSocketChannel 和 NioServerSocketChannel 的公共父类。
     private final SelectableChannel ch;
+    // 代表 JDK SelectionKey 的 OP_READ。
     protected final int readInterestOp;
+    // Channel 注册到 EventLoop（Selector）时返回的 key，修改它可以改变感兴趣的事件。
     volatile SelectionKey selectionKey;
     boolean readPending;
     private final Runnable clearReadPendingRunnable = new Runnable() {
@@ -64,9 +68,12 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     /**
      * The future of the current connection attempt.  If not null, subsequent
      * connection attempts will fail.
+     * 代表连接操作结果。
      */
     private ChannelPromise connectPromise;
+    // 连接超时定时器。
     private Future<?> connectTimeoutFuture;
+    // connect 时的远程地址。
     private SocketAddress requestedRemoteAddress;
 
     /**
@@ -372,6 +379,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         return loop instanceof NioEventLoop;
     }
 
+    //将channel注册到 Selector上
     @Override
     protected void doRegister() throws Exception {
         boolean selected = false;
@@ -399,6 +407,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         eventLoop().cancel(selectionKey());
     }
 
+    //通过SelectionKey 设置注册读事件
     @Override
     protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called

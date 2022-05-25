@@ -56,6 +56,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     private static final Method OPEN_SERVER_SOCKET_CHANNEL_WITH_FAMILY =
             SelectorProviderUtil.findOpenMethod("openServerSocketChannel");
 
+    //这个方法属属于NioServerSocketChannel 类方法 调用provider生成jdk底层的ServerSocketChannel 对象
     private static ServerSocketChannel newChannel(SelectorProvider provider, InternetProtocolFamily family) {
         try {
             ServerSocketChannel channel =
@@ -138,6 +139,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     @Override
     protected void doBind(SocketAddress localAddress) throws Exception {
         if (PlatformDependent.javaVersion() >= 7) {
+            //javaChannel()方法返回的实际上就是上一个方法生成的ServerSocketChannel 对象
             javaChannel().bind(localAddress, config.getBacklog());
         } else {
             javaChannel().socket().bind(localAddress, config.getBacklog());
@@ -149,12 +151,16 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         javaChannel().close();
     }
 
+    //接收客户端的请求会调用到的方法
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
+
+        //调用java底层的accept方法
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
             if (ch != null) {
+                //可以看出这里新建了个NioSocketChannel对象，并把当前对象 当成新创建对象的父对象
                 buf.add(new NioSocketChannel(this, ch));
                 return 1;
             }

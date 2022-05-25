@@ -40,6 +40,7 @@ public interface ChannelOutboundHandler extends ChannelHandler {
      * @param promise           the {@link ChannelPromise} to notify once the operation completes
      * @throws Exception        thrown if an error occurs
      */
+    // 当请求将 Channel 连接到远程节点时被调用.
     void connect(
             ChannelHandlerContext ctx, SocketAddress remoteAddress,
             SocketAddress localAddress, ChannelPromise promise) throws Exception;
@@ -51,6 +52,7 @@ public interface ChannelOutboundHandler extends ChannelHandler {
      * @param promise           the {@link ChannelPromise} to notify once the operation completes
      * @throws Exception        thrown if an error occurs
      */
+    // 当请求将 Channel 从远程节点断开时被调用.
     void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception;
 
     /**
@@ -69,11 +71,13 @@ public interface ChannelOutboundHandler extends ChannelHandler {
      * @param promise           the {@link ChannelPromise} to notify once the operation completes
      * @throws Exception        thrown if an error occurs
      */
+    // 当请求将 Channel 从它的 EventLoop 注销时被调用.
     void deregister(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception;
 
     /**
      * Intercepts {@link ChannelHandlerContext#read()}.
      */
+    // 当请求从 Channel 读取更多的数据时被调用.
     void read(ChannelHandlerContext ctx) throws Exception;
 
     /**
@@ -86,6 +90,7 @@ public interface ChannelOutboundHandler extends ChannelHandler {
      * @param promise           the {@link ChannelPromise} to notify once the operation completes
      * @throws Exception        thrown if an error occurs
      */
+    // 当请求通过 Channel 将数据写到远程节点时被调用.
     void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception;
 
     /**
@@ -95,5 +100,6 @@ public interface ChannelOutboundHandler extends ChannelHandler {
      * @param ctx               the {@link ChannelHandlerContext} for which the flush operation is made
      * @throws Exception        thrown if an error occurs
      */
+    // 当请求从 Channel 将入队数据冲刷到远程节点时被调用.
     void flush(ChannelHandlerContext ctx) throws Exception;
 }

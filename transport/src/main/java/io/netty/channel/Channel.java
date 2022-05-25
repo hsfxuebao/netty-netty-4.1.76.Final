@@ -95,27 +95,31 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
     Channel parent();
 
     /**
-     * Returns the configuration of this channel.
+     * Returns the configuration of this channel. 获取当前Channel的配置信息，例如CONNECT_TIMEOUT_MILLIS
      */
     ChannelConfig config();
 
     /**
      * Returns {@code true} if the {@link Channel} is open and may get active later
+     *      判断当前Channel是否已经打开
      */
     boolean isOpen();
 
     /**
      * Returns {@code true} if the {@link Channel} is registered with an {@link EventLoop}.
+     * 判断当前Channel是否已经注册到EventLoop上。
      */
     boolean isRegistered();
 
     /**
      * Return {@code true} if the {@link Channel} is active and so connected.
+     * 判断当前Channel是否已经处于激活状态
      */
     boolean isActive();
 
     /**
      * Return the {@link ChannelMetadata} of the {@link Channel} which describe the nature of the {@link Channel}.
+     * 获取当前Channel的元数据描述信息，包括TCP参数配等。
      */
     ChannelMetadata metadata();
 
@@ -127,6 +131,7 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *
      * @return the local address of this channel.
      *         {@code null} if this channel is not bound.
+     *         获取当前Channel的本地绑定地址
      */
     SocketAddress localAddress();
 
@@ -143,6 +148,7 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *         use {@link DatagramPacket#recipient()} to determine
      *         the origination of the received message as this method will
      *         return {@code null}.
+     *         获取当前Channel通信的远程Socket地址。
      */
     SocketAddress remoteAddress();
 

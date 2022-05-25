@@ -50,6 +50,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
     // purposes.
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
+    // config对象
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
     private volatile EventLoopGroup childGroup;
     private volatile ChannelHandler childHandler;
@@ -129,6 +130,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 设置NioServerSocketChannel的TCP属性,由于LinkedHashMap非线程安全，采用同步处理
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, newAttributesArray());
 
@@ -204,14 +206,19 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            // 1. msg强转成Channel，实际上就是好NioSocketChannel
             final Channel child = (Channel) msg;
-
+            // 2. 添加NioSocketChannel 的pipeline 的handler,就是我们main方法里面
+            // 设置的childHandler
             child.pipeline().addLast(childHandler);
-
+            // 3. 设置NioSocketChannel各种属性和参数
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 
             try {
+                // todo 将客户端注册到work线程池
+                // 4.将该NioSocketChannel注册到childGroup中的一个EventLoop上，并添加一个监听器
+                // 这个childGroup 就是我们main方法创建的数组 workGroup
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

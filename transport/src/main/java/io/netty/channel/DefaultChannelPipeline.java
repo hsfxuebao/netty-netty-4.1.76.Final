@@ -200,9 +200,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
             checkMultiplicity(handler);
-
+            // 创建AbstractChannelHandlerContext对象
             newCtx = newContext(group, filterName(name, handler), handler);
-
+            // 添加
             addLast0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
@@ -220,6 +220,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 return this;
             }
         }
+        // 最后，同步或者异步或者晚点异步的调用 callHandlerAdded0 方法
         callHandlerAdded0(newCtx);
         return this;
     }

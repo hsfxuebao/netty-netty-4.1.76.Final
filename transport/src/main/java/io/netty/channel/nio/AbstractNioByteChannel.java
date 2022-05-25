@@ -213,6 +213,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
     }
 
     private int doWriteInternal(ChannelOutboundBuffer in, Object msg) throws Exception {
+        // 对于 ByteBuf 类型、FileRegion 类型分开处理，其他未知类型抛异常
         if (msg instanceof ByteBuf) {
             ByteBuf buf = (ByteBuf) msg;
             if (!buf.isReadable()) {
@@ -255,6 +256,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         int writeSpinCount = config().getWriteSpinCount();
         do {
             Object msg = in.current();
+            // 如果没有要写的数据，就清除写标志位，并返回
             if (msg == null) {
                 // Wrote all messages.
                 clearOpWrite();
@@ -288,6 +290,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
 
     protected final void incompleteWrite(boolean setOpWrite) {
         // Did not write completely.
+        // setOpWrite 为 true，设置 SelectionKey 写标志位
         if (setOpWrite) {
             setOpWrite();
         } else {
@@ -298,6 +301,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             clearOpWrite();
 
             // Schedule flush again later so other tasks can be picked up in the meantime
+            // 否则，启动 flushTask 继续写半包消息
             eventLoop().execute(flushTask);
         }
     }

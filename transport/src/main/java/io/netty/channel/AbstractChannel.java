@@ -44,15 +44,20 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractChannel.class);
 
+    // 父 Channel
     private final Channel parent;
+    // 全局唯一 id。
     private final ChannelId id;
+    // Unsafe 实例
     private final Unsafe unsafe;
+    // 当前 Channel 对应的 DefaultChannelPipeline。
     private final DefaultChannelPipeline pipeline;
     private final VoidChannelPromise unsafeVoidPromise = new VoidChannelPromise(this, false);
     private final CloseFuture closeFuture = new CloseFuture(this);
 
     private volatile SocketAddress localAddress;
     private volatile SocketAddress remoteAddress;
+    // EventLoop
     private volatile EventLoop eventLoop;
     private volatile boolean registered;
     private boolean closeInitiated;
@@ -219,26 +224,51 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         return registered;
     }
 
+    /**
+     * 绑定指定的本地Socket地址，该方法会
+     * 级联触发ChannelHandler.bind(ChannelHandlerContext,SocketAddress,ChannelPromise)事件。
+
+     */
     @Override
     public ChannelFuture bind(SocketAddress localAddress) {
         return pipeline.bind(localAddress);
     }
 
+    /**
+     * ChannelFuture connect(SocketAddress remoteAddress):客户端使用指定的服务端地址发起连接请求，
+     * 如果连接因为应答超时而失败，ChannelFuture中的操作结果ConnectTimeoutException异常，
+     * 如果连接被拒绝，操作结果为ConnectException。
+     * 该方法会级联触发ChannelHandler.connect(ChannelHandlerContext,SocketAddress,SocketAddress,ChannelPromise)事件。
+     */
     @Override
     public ChannelFuture connect(SocketAddress remoteAddress) {
         return pipeline.connect(remoteAddress);
     }
 
+    /**
+     * 唯一不同的是先绑定本地地址localAddress，然后在连接服务端
+     */
     @Override
     public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress) {
         return pipeline.connect(remoteAddress, localAddress);
     }
 
+    /**
+     * ChannelFuture disconnect(ChannelPromise promise):请求断开与远程通信对端的连接
+     * 并使用ChannelPromise获取操作结果的通知信息。该方法会级联
+     * 触发ChannelHandler.disconnect(ChannelHandlerContext,ChannelPromise)事件。
+     */
     @Override
     public ChannelFuture disconnect() {
         return pipeline.disconnect();
     }
 
+    /**
+     * ChannelFuture close(ChannelPromise promise):主动关闭当前连接，
+     * 通过ChannelPromise设置操作结果并进行结果通知，无论操作是否成功，
+     * 都可以通过ChannelPromise获取操作结果。
+     * 改操作会级联触发ChannelPipe中所有ChannelHandler的ChannelHandler.close(ChannelHandlerContext,ChannelPromise)事件。
+     */
     @Override
     public ChannelFuture close() {
         return pipeline.close();
@@ -249,6 +279,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         return pipeline.deregister();
     }
 
+    /**
+     * Channel flush(): 将之前写入到发送环形数组中的消息全部写入到目标Channel中，发送给通信对方
+     */
     @Override
     public Channel flush() {
         pipeline.flush();
@@ -285,22 +318,43 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         return pipeline.deregister(promise);
     }
 
+    /**
+     * Channel read():从当前的Channel中读取数据到第一个inbound缓冲区中，如果
+     * 数据被成功读取，触发ChannelHandler.channelRead(ChannelHandlerContext,Object)事件。
+     * 读取操作API调用完成之后，紧接着会触发ChannelHandler..channelReadComplete(Channel
+     * HandlerContext)事件，这样业务的ChannelHandler可以决定是否需要继续读取数据。如果
+     * 己经有读操作请求被挂起，则后续的读操作会被忽略。
+     */
     @Override
     public Channel read() {
         pipeline.read();
         return this;
     }
 
+    /**
+     * ChannelFuture write(Object msg):请求将当前的msg通过ChannePipe写入到目标Channel中。
+     * 注意，write操作只是将消息存入到消息发送环形数组中，并没有真正被发送，
+     * 只有调用flush操作才会被写入到Channel中，发送给对方。
+
+     */
     @Override
     public ChannelFuture write(Object msg) {
         return pipeline.write(msg);
     }
 
+    /**
+     * ChannelFuture write(Object msg,ChannelPromise promise):功能与write（Object msg）相同，
+     * 但是携带了ChannelPromise 参数负责设置写入操作的结果。
+     */
     @Override
     public ChannelFuture write(Object msg, ChannelPromise promise) {
         return pipeline.write(msg, promise);
     }
 
+    /**
+     * ChannelFuture writeAndFlush(Object msg,ChannelPromise promiese):与方法3功能类似，
+     * 不同之处在于它会将消息写入Channel中发送，等价于单独调用write和flush操作的组合。
+     */
     @Override
     public ChannelFuture writeAndFlush(Object msg) {
         return pipeline.writeAndFlush(msg);
@@ -465,10 +519,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
             ObjectUtil.checkNotNull(eventLoop, "eventLoop");
             if (isRegistered()) {
+                // 如果已经注册过，则置为失败
                 promise.setFailure(new IllegalStateException("registered to an event loop already"));
                 return;
             }
             if (!isCompatible(eventLoop)) {
+                // 如果线程类型不兼容，则置为失败
                 promise.setFailure(
                         new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
                 return;
@@ -483,6 +539,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
+                            // todo
                             register0(promise);
                         }
                     });
@@ -492,6 +549,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                             AbstractChannel.this, t);
                     closeForcibly();
                     closeFuture.setClosed();
+                    // 出现异常情况置promise为失败
                     safeSetFailure(promise, t);
                 }
             }
@@ -501,6 +559,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
                 // call was outside of the eventLoop
+                // 注册之前，先将promise置为不可取消转态
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
@@ -513,6 +572,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // user may already fire events through the pipeline in the ChannelFutureListener.
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // promise置为成功
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
@@ -525,6 +585,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                         // again so that we process inbound data.
                         //
                         // See https://github.com/netty/netty/issues/4805
+                        // todo
                         beginRead();
                     }
                 }
@@ -532,6 +593,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // Close the channel directly to avoid FD leak.
                 closeForcibly();
                 closeFuture.setClosed();
+                // 出现异常情况置promise为失败
                 safeSetFailure(promise, t);
             }
         }
@@ -559,6 +621,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             boolean wasActive = isActive();
             try {
+                //  todo
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
@@ -570,11 +633,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
+                        // bind方法执行成功后，执行通道的fireChannelActive方法
+                        // 也就是所有handler 的channelActive()方法
                         pipeline.fireChannelActive();
                     }
                 });
             }
-
+            // safeSetSuccess(promise)，告诉 promise 任务成功了。其可以执行监听器的方法了。
             safeSetSuccess(promise);
         }
 
@@ -831,6 +896,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             assertEventLoop();
 
             try {
+                // todo
                 doBeginRead();
             } catch (final Exception e) {
                 invokeLater(new Runnable() {
