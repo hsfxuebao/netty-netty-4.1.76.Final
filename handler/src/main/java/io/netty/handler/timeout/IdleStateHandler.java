@@ -317,10 +317,12 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         }
 
         state = 1;
+        //todo
         initOutputChanged(ctx);
 
         lastReadTime = lastWriteTime = ticksInNanos();
         if (readerIdleTimeNanos > 0) {
+            //这里的 schedule 方法会调用 eventLoop 的 schedule 方法，将定时任务添加进队列中
             readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx),
                     readerIdleTimeNanos, TimeUnit.NANOSECONDS);
         }
@@ -474,7 +476,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
             if (!ctx.channel().isOpen()) {
                 return;
             }
-
+            // todo
             run(ctx);
         }
 
@@ -489,6 +491,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
         @Override
         protected void run(ChannelHandlerContext ctx) {
+            // 用户设置的超时时间
             long nextDelay = readerIdleTimeNanos;
             if (!reading) {
                 nextDelay -= ticksInNanos() - lastReadTime;
@@ -496,13 +499,16 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
             if (nextDelay <= 0) {
                 // Reader is idle - set a new timeout and notify the callback.
+                // 用于取消任务 promise
                 readerIdleTimeout = schedule(ctx, this, readerIdleTimeNanos, TimeUnit.NANOSECONDS);
 
                 boolean first = firstReaderIdleEvent;
                 firstReaderIdleEvent = false;
 
                 try {
+                    //再次提交任务
                     IdleStateEvent event = newIdleStateEvent(IdleState.READER_IDLE, first);
+                    //触发用户 handler use
                     channelIdle(ctx, event);
                 } catch (Throwable t) {
                     ctx.fireExceptionCaught(t);
@@ -533,6 +539,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                 firstWriterIdleEvent = false;
 
                 try {
+                    //
                     if (hasOutputChanged(ctx, first)) {
                         return;
                     }

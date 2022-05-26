@@ -97,6 +97,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 // 3. 循环容器，执行 pipeline.fireChannelRead()方法
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    // todo
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
                 readBuf.clear();

@@ -15,6 +15,8 @@
  */
 package io.netty.myexample.netty.source.futurethread;
 
+import java.util.concurrent.Callable;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandler.Sharable;
@@ -75,7 +77,7 @@ public class EchoServerHandler extends ChannelInboundHandlerAdapter {
             }
         });*/
 
-        /*
+
         //将任务提交到 group线程池
         group.submit(new Callable<Object>() {
             @Override
@@ -95,6 +97,7 @@ public class EchoServerHandler extends ChannelInboundHandlerAdapter {
             }
         });
 
+        /*
         //将任务提交到 group线程池
         group.submit(new Callable<Object>() {
             @Override
